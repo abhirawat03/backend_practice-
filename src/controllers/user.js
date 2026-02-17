@@ -4,6 +4,7 @@ import {User} from "../models/user.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken"
+import {v2 as cloudinary} from "cloudinary"
 
 const generateAccessAndRefreshTokens = async(userId)=>{
     try {
@@ -238,7 +239,11 @@ const changeCurrentPassword = asyncHandler(async(req,res)=>{
 const getCurrentUser = asyncHandler(async(req,res)=>{
     return res
     .status(200)
-    .json(200, req.user,"current user fetched Successfully")
+    .json(new ApiResponse(
+        200, 
+        req.user,
+        "current user fetched Successfully"
+    ))
 })
 
 const updateAccountDetails = asyncHandler(async(req,res)=>{
@@ -248,7 +253,7 @@ const updateAccountDetails = asyncHandler(async(req,res)=>{
         throw new ApiError(400,"All fields are required")
     }
 
-    const user = User.findByIdAndUpdate(
+    const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
             $set: {
@@ -269,6 +274,24 @@ const updateUserAvatar = asyncHandler(async(req,res)=>{
     if(!avatarLocalPath){
         throw new ApiError(400, "Avatar file is missing")
     }
+
+    //get current user
+    const existingUser = await User.findById(req.user?._id)
+
+    // DELETE OLD AVATAR FROM CLOUDINARY
+    if(existingUser?.avatar){
+        const urlParts = existingUser.avatar.split('/')
+        const fileName = urlParts[urlParts.length - 1]
+        const publicId = fileName.split('.')[0]
+
+        try {
+            await cloudinary.uploader.destroy(publicId)
+        } catch (err) {
+            console.error("Old avatar delete failed:", err.message)
+            // throw new ApiError(500, "Failed to delete old avatar from cloudinary")
+        }
+    }
+
     const avatar = await uploadOnCloudinary(avatarLocalPath)
     
     if(!avatar.url){
@@ -296,6 +319,24 @@ const updateUserCoverImage = asyncHandler(async(req,res)=>{
     if(!coverImageLocalPath){
         throw new ApiError(400, "Cover image file is missing")
     }
+
+    //get current user
+    const existingUser = await User.findById(req.user?._id)
+
+    // DELETE OLD COVER IMAGE FROM CLOUDINARY
+    if(existingUser?.coverImage){
+        const urlParts = existingUser.coverImage.split('/')
+        const fileName = urlParts[urlParts.length - 1]
+        const publicId = fileName.split('.')[0]
+
+        try {
+            await cloudinary.uploader.destroy(publicId)
+        } catch (err) {
+            console.error("Old cover image delete failed:", err.message)
+            // throw new ApiError(500, "Failed to delete old avatar from cloudinary")
+        }
+    }
+
     const coverImage = await uploadOnCloudinary(coverImageLocalPath)
     
     if(!coverImage.url){
