@@ -279,35 +279,59 @@ const updateUserAvatar = asyncHandler(async(req,res)=>{
     //get current user
     const existingUser = await User.findById(req.user?._id)
 
-    // DELETE OLD AVATAR FROM CLOUDINARY
-    if(existingUser?.avatar){
-        const urlParts = existingUser.avatar.split('/')
-        const fileName = urlParts[urlParts.length - 1]
-        const publicId = fileName.split('.')[0]
-
-        try {
-            await cloudinary.uploader.destroy(publicId)
-        } catch (err) {
-            console.error("Old avatar delete failed:", err.message)
-            // throw new ApiError(500, "Failed to delete old avatar from cloudinary")
-        }
+    if (!existingUser) {
+        throw new ApiError(404, "User not found");
     }
-
-    const avatar = await uploadOnCloudinary(avatarLocalPath)
-    
+    // upload new avatar FIRST
+    const oldAvatar = existingUser?.avatar;
+    let avatar = await uploadOnCloudinary(avatarLocalPath);
     if(!avatar.url){
         throw new ApiError(400,"Error while uploading on avatar")
     }
 
-    const user = await User.findByIdAndUpdate(
-        req.user?._id,
-        {
-            $set:{
-                avatar:avatar.url
-            }
-        },
-        {new:true}
-    ).select("-password")
+    // update DB
+    let user;
+    try {
+        user = await User.findByIdAndUpdate(
+            req.user?._id,
+            {
+                $set:{
+                    avatar:avatar.url
+                }
+            },
+            {new:true}
+        ).select("-password")
+        if (!user) throw new Error("DB update failed");
+    } catch (error) {
+        if (avatar?.url) {
+            const publicId = avatar.url.split('/').pop().split('.')[0];
+            await cloudinary.uploader.destroy(publicId).catch(()=>{});
+        }
+        throw new ApiError(500, "Avatar update failed");
+    }
+
+    // ==============================
+    // 4️⃣ delete old thumbnail (cleanup)
+    // only after DB success
+    // ==============================
+    if (oldAvatar) {
+        const publicId = oldAvatar.split('/').pop().split('.')[0];
+        await cloudinary.uploader.destroy(publicId).catch(()=>{});
+    }
+    
+    // if(existingUser?.avatar){
+    //     const urlParts = existingUser.avatar.split('/')
+    //     const fileName = urlParts[urlParts.length - 1]
+    //     const publicId = fileName.split('.')[0]
+
+    //     try {
+    //         await cloudinary.uploader.destroy(publicId)
+    //     } catch (err) {
+    //         console.error("Old avatar delete failed:", err.message)
+    //         // throw new ApiError(500, "Failed to delete old avatar from cloudinary")
+    //     }
+    // }
+    
     return res
     .status(200)
     .json(
