@@ -222,10 +222,11 @@ const deleteVideo = asyncHandler(async (req, res) => {
     const { videoId } = req.params
     //TODO: delete video
     if (!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(400,"Invalid videoId");
-
+    const userId = req.user?._id;
+    if(!userId) throw new ApiError(401,"Unauthorized")
     const deletedVideo = await Video.findOneAndDelete({
         _id:videoId,
-        owner:req.user?._id
+        owner:userId
     })
 
     if (!deletedVideo) {
