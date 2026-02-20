@@ -195,7 +195,7 @@ const deleteComment = asyncHandler(async (req, res) => {
     const { commentId } = req.params
     if (!mongoose.Types.ObjectId.isValid(commentId)) throw new ApiError(400,"Invalid commentId");
 
-    const deleteComment = await Comment.findOneAndDelete({
+    const deletedComment = await Comment.findOneAndDelete({
         _id:commentId,
         owner:req.user?._id
     })
